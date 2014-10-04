@@ -19,6 +19,8 @@
 #ifndef RECAST_H
 #define RECAST_H
 
+#include <math.h>
+
 /// The value of PI used by Recast.
 static const float RC_PI = 3.14159265f;
 
@@ -751,19 +753,40 @@ bool rcCreateHeightfield(rcContext* ctx, rcHeightfield& hf, int width, int heigh
 						 const float* bmin, const float* bmax,
 						 float cs, float ch);
 
+void calcTriNormal(const float* v0, const float* v1, const float* v2, float* norm);
+
 /// Sets the area id of all triangles with a slope below the specified value
 /// to #RC_WALKABLE_AREA.
+/// Only sets the aread id's for the walkable triangles.  Does not alter the
+/// area id's for unwalkable triangles.
+///
+/// See the #rcConfig documentation for more information on the configuration parameters.
+///
+/// @see rcHeightfield, rcClearUnwalkableTriangles, rcRasterizeTriangles
 ///  @ingroup recast
-///  @param[in,out]	ctx					The build context to use during the operation.
+///  @param[in]		verts				The vertices. [(x, y, z) * @p nv]
+///  @param[in]		tris				The triangle vertex indices. [(vertA, vertB, vertC) * @p nt]
+///  @param[in]		nt					The number of triangles. This implies an appropriate number
+///                                     of vertices in verts.
 ///  @param[in]		walkableSlopeAngle	The maximum slope that is considered walkable.
 ///  									[Limits: 0 <= value < 90] [Units: Degrees]
-///  @param[in]		verts				The vertices. [(x, y, z) * @p nv]
-///  @param[in]		nv					The number of vertices.
-///  @param[in]		tris				The triangle vertex indices. [(vertA, vertB, vertC) * @p nt]
-///  @param[in]		nt					The number of triangles.
 ///  @param[out]	areas				The triangle area ids. [Length: >= @p nt]
-void rcMarkWalkableTriangles(rcContext* ctx, const float walkableSlopeAngle, const float* verts, int nv,
-							 const int* tris, int nt, unsigned char* areas); 
+///
+template<typename VT, typename TT>
+void rcMarkWalkableTriangles(const VT* verts,
+                              const TT* tris, int nt,
+                              const float walkableSlopeAngle,
+                              unsigned char* areas) {
+    const float walkableThr = cosf(walkableSlopeAngle/180.0f*RC_PI);
+    float norm[3];
+    for (int i = 0; i < nt; ++i) {
+        const TT* tri = &tris[i*3];
+        calcTriNormal(&verts[tri[0]*3], &verts[tri[1]*3], &verts[tri[2]*3], norm);
+        // Check if the face is walkable.
+        if (norm[1] > walkableThr)
+            areas[i] = RC_WALKABLE_AREA;
+    }
+}
 
 /// Sets the area id of all triangles with a slope greater than or equal to the specified value to #RC_NULL_AREA.
 ///  @ingroup recast
